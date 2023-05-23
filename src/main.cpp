@@ -176,6 +176,8 @@ void setMotorRelayState(bool state)
   if (state)
   {
     digitalWrite(dcMotorRelayPin, LOW);
+    delay(10000);
+    digitalWrite(dcMotorRelayPin, HIGH);
   }
   else
   {
