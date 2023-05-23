@@ -310,12 +310,16 @@ void setup()
   dht.setup(DHTpin, DHTesp::DHT11);
   // Set up heater relay module as output
   pinMode(heaterRelayPin, OUTPUT);
-  // Set up fan relay module set as output
+  // Set up fan relay module as output
   pinMode(fanRelayPin, OUTPUT);
-  // Set up humidifier relay module set as output
+  // Set up humidifier relay module as output
   pinMode(humidifierPin, OUTPUT);
-  // Set up water level sensor
+  // Set up water level sensor as output
   pinMode(waterLevelSensorPowerPin, OUTPUT);
+  // Set up DC motor relay module as output
+  pinMode(dcMotorRelayPin, OUTPUT);
+  // Set up PIR as input
+  pinMode(motionSensorPin, INPUT);
 
   // Connect to WiFi
   WiFi.mode(WIFI_STA);
@@ -393,6 +397,7 @@ void loop()
   if (digitalRead(motionSensorPin))
   {
     motionSensorState = "1";
+    Serial.println("Motion detected");
   }
   else if (!digitalRead(motionSensorPin))
   {
