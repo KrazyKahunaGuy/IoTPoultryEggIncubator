@@ -42,6 +42,10 @@ String motionSensorState = "0"; // Initialize the motion sensor state
 const int dcMotorRelayPin = D5; // Set the dc motor relay pin to GPIO14
 // DC motor relay state
 bool dcMotorRelayState = false; // Initialize the dc motor relay state
+unsigned long dcMotorInterval;
+const unsigned long dcMotorTurnInterval = 10000;
+unsigned long previousMillisDcMotor = 0;
+unsigned long previousMillisDcMotorTurn = 0;
 /**** GPIO Layout ****/
 
 /**** WiFi connection details ****/
@@ -63,6 +67,13 @@ WiFiClientSecure espClient;
 /**** MQTT client initialisation using WiFi connection ****/
 PubSubClient mqttClient(espClient);
 /**** MQTT client initialisation using WiFi connection ****/
+
+/**** Conditional Variables ****/
+float maxTemperature;
+float minTemperature;
+float maxHumidity;
+float minHumidity;
+bool turnStage;
 
 unsigned long lastMsg = 0;
 #define MSG_BUFFER_SIZE (50)
@@ -167,7 +178,7 @@ void setMotionSensorState(bool state)
 /**** Function to handle motion sensor state ****/
 
 /**** Function to handle dc motor relay state ****/
-void setMotorRelayState(bool state)
+void setMotorRelayState(bool state, unsigned long currentMillisDcMotorTurn)
 {
   // Set the dc motor relay state and perform necessary actions
   dcMotorRelayState = state;
@@ -176,8 +187,11 @@ void setMotorRelayState(bool state)
   if (state)
   {
     digitalWrite(dcMotorRelayPin, LOW);
-    delay(10000);
-    digitalWrite(dcMotorRelayPin, HIGH);
+    Serial.println("TURNING!");
+    if (currentMillisDcMotorTurn - previousMillisDcMotorTurn >= dcMotorTurnInterval) {
+      previousMillisDcMotorTurn = currentMillisDcMotorTurn;
+      digitalWrite(dcMotorRelayPin, HIGH);
+    }
   }
   else
   {
@@ -238,54 +252,31 @@ void callback(char *topic, byte *payload, unsigned int length)
   }
 
   // Access JSON values and perform conditionals
-  if (doc.containsKey("heaterState"))
+  if (doc.containsKey("maxTemperature"))
   {
-    String docHeaterState = doc["heaterState"];
-
-    if (docHeaterState.equals("1") && !heaterRelayState)
-    {
-      setHeaterRelayState(true);
-    }
-    else if (docHeaterState.equals("0") && heaterRelayState)
-    {
-      setHeaterRelayState(false);
-    }
+    maxTemperature = doc["maxTemperature"];
   }
-  if (doc.containsKey("coolingFanState"))
+  if (doc.containsKey("minTemperature"))
   {
-    String docFanState = doc["coolingFanState"];
-
-    if (docFanState.equals("1") && !fanRelayState)
-    {
-      setFanRelayState(true);
-    }
-    else if (docFanState.equals("0") && fanRelayState)
-    {
-      setFanRelayState(false);
-    }
+    minTemperature = doc["minTemperature"];
   }
-  if (doc.containsKey("humidifierState"))
+  if (doc.containsKey("maxHumidity"))
   {
-    String docHumidifierState = doc["humidifierState"];
-    if (docHumidifierState.equals("1") && !humidifierState)
-    {
-      setHumidifierState(true);
-    }
-    else if (docHumidifierState.equals("0") && humidifierState)
-    {
-      setHumidifierState(false);
-    }
+    maxHumidity = doc["maxHumidity"];
   }
-  if (doc.containsKey("motorState"))
+  if (doc.containsKey("minHumidity"))
   {
-    String docMotorState = doc["motorState"];
-    if (docMotorState.equals("1") && !dcMotorRelayState)
+    minHumidity = doc["minHumidity"];
+  }
+  if (doc.containsKey("turnStage"))
+  {
+    turnStage = doc["turnStage"];
+    if (turnStage)
     {
-      setMotorRelayState(true);
-    }
-    else if (docMotorState.equals("0") && dcMotorRelayState)
-    {
-      setMotorRelayState(false);
+      if (doc.containsKey("eggTurningInterval"))
+      {
+        dcMotorInterval = doc["eggTurningInterval"];
+      }
     }
   }
 }
@@ -346,7 +337,7 @@ void setup()
   // Set initial humidifier state
   setHumidifierState(false);
   // Set initial DC motor relay state
-  setMotorRelayState(false);
+  setMotorRelayState(false, millis());
   // Set initial state for water level sensor power pin
   digitalWrite(waterLevelSensorPowerPin, LOW);
 
@@ -405,6 +396,63 @@ void loop()
   {
     motionSensorState = "0";
   }
+
+  /**** Heater control ****/
+  if (temperature >= maxTemperature)
+  {
+    setHeaterRelayState(false);
+    setFanRelayState(true);
+    Serial.println("HEATER OFF");
+    Serial.println("COOLING FAN ON");
+  }
+  else if (temperature <= minTemperature)
+  {
+    setHeaterRelayState(true);
+    setFanRelayState(false);
+    Serial.println("HEATER ON");
+    Serial.println("COOLING FAN OFF");
+  }
+  else
+  {
+    setHeaterRelayState(false);
+    setFanRelayState(false);
+    Serial.println("HEATER AND COOLING FAN OFF");
+  }
+  /**** Heater control ****/
+
+  /**** Humidity control ****/
+  if (humidity >= maxHumidity)
+  {
+    setHumidifierState(false);
+    Serial.println("HUMIDIFIER OFF");
+  }
+  else if (humidity < minHumidity)
+  {
+    setHumidifierState(true);
+    Serial.println("HUMIDIFIER ON");
+  }
+  else
+  {
+    setHumidifierState(false);
+    Serial.println("HUMIDIFIER OFF");
+  }
+  /**** Humidity control ****/
+
+  /**** Egg turn control ****/
+  unsigned long currentMillisDcMotor = millis();
+
+  if (turnStage)
+  {
+    // Check if interval has passed
+    if (currentMillisDcMotor - previousMillisDcMotor >= dcMotorInterval)
+    {
+      // Save the current time for the next interval
+      previousMillisDcMotor = currentMillisDcMotor;
+      setMotorRelayState(true, millis());
+      Serial.println("TURNED");
+    }
+  }
+  /**** Egg turn control ****/
 
   DynamicJsonDocument doc(1024);
 
